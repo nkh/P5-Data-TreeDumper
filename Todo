@@ -1,6 +1,8 @@
 [12:03] <kent\n> nadim: $("ul").click(function(){ $(this).find("li").show() });  # theres a start
 
 
+#DISPLAY_VALUE => 0
+
 DTD::Flare instead for jquery
 
 the filter is called three times, it could be cached

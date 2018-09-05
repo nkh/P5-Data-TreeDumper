@@ -67,6 +67,7 @@ our %setup =
 	, COLOR_LEVELS           => undef
 	, GLYPHS                 => ['|  ', '|- ', '`- ', '   ']
 	, QUOTE_HASH_KEYS        => 0
+	, DISPLAY_NO_VALUE	 => 0
 	, QUOTE_VALUES           => 0
 	, REPLACEMENT_LIST       => [ ["\n" => '[\n]'], ["\r" => '[\r]'], ["\t" => '[\t]'] ]
 	
@@ -114,6 +115,7 @@ our $Numberlevels         = $setup{NUMBER_LEVELS} ;
 our $Colorlevels          = $setup{COLOR_LEVELS} ;
 our $Glyphs               = [@{$setup{GLYPHS}}] ; # we don't want it to be shared
 our $Quotehashkeys        = $setup{QUOTE_HASH} ;
+our $Displaynovalue       = $setup{DISPLAY_NO_VALUE} ;
 our $Quotevalues          = $setup{QUOTE_VALUES} ;
 our $ReplacementList      = [@{$setup{REPLACEMENT_LIST}}] ; # we don't want it to be shared
 
@@ -585,7 +587,7 @@ my $output = RenderNode
 return($output) ;
 }
 
-#-------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 
 sub GetBrackets
 {
@@ -859,16 +861,19 @@ for(ref $element)
 				$element_value =~ s/$find/$replace/g ;
 				}
 			}
-		
-		if($setup->{QUOTE_VALUES} && defined $element)
-			{
-			$default_element_rendering = " = '$element_value'" ;
+	
+		unless ($setup->{DISPLAY_NO_VALUE})
+			{	
+			if($setup->{QUOTE_VALUES} && defined $element)
+				{
+				$default_element_rendering = " = '$element_value'" ;
+				}
+			else
+				{
+				$default_element_rendering = " = $element_value" ;
+				}
 			}
-		else
-			{
-			$default_element_rendering = " = $element_value" ;
-			}
-			
+	
 		$perl_address = "$element_id" if($setup->{DISPLAY_PERL_ADDRESS}) ;
 		
 		# $setup->{DISPLAY_TIE} doesn't make sense as scalars are copied
@@ -1876,6 +1881,11 @@ the hash keys. Hash keys are not quoted by default.
      |  |- 'b' [H4]
      |  |  |- 'a' = 0 [S5]
 
+
+=head2 DISPLAY_NO_VALUE
+
+Only element names are added to the tree rendering
+
 =head2 QUOTE_VALUES
 
 B<QUOTE_VALUES> and its package variable B<$Data::TreeDumper::Quotevalues> can be set if you wish to single quote
@@ -2583,6 +2593,8 @@ B<VIRTUAL_WIDTH> instead. Default is 120.
 =item * NUMBER_LEVELS 
 
 =item * QUOTE_HASH_KEYS
+
+=item * DISPLAY_NO_VALUE
 
 =item * QUOTE_VALUES
 
