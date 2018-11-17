@@ -763,7 +763,7 @@ else
 		}
 	else
 		{
-		my ($columns, $rows) = ('', '') ;
+		my $columns = '' ;
 		
 		if(defined $setup->{WRAP_WIDTH})
 			{
@@ -775,15 +775,15 @@ else
 				{
 				if($^O ne 'MSWin32')
 					{
-					eval "(\$columns, \$rows) = Term::Size::chars *STDOUT{IO} ;" ;
+					eval '$columns = Term::Size::chars *STDOUT{IO} ;' ;
 					}
 				else
 					{
-					($columns, $rows) = $WIN32_CONSOLE->Size();
+					($columns) = $WIN32_CONSOLE->Size();
 					}
 				}
 				
-			if($columns eq '')
+			unless($columns)
 				{
 				$columns = $setup->{VIRTUAL_WIDTH}  ;
 				}
