@@ -14,7 +14,7 @@ our %EXPORT_TAGS = ('all' => [ qw() ]) ;
 our @EXPORT_OK = ( @{$EXPORT_TAGS{'all'} } ) ;
 our @EXPORT = qw(DumpTree PrintTree DumpTrees CreateChainingFilter);
 
-our $VERSION = '0.37' ;
+our $VERSION = '0.38' ;
 
 my $WIN32_CONSOLE ;
 
@@ -53,7 +53,7 @@ our %setup =
 	, INDENTATION            => ''
 	, NO_OUTPUT              => 0
 	, START_LEVEL            => 1
-	, VIRTUAL_WIDTH          => 120
+	, VIRTUAL_WIDTH          => 160
 	, DISPLAY_ROOT_ADDRESS   => 0
 	, DISPLAY_ADDRESS        => 1
 	, DISPLAY_PATH           => 0
@@ -72,7 +72,7 @@ our %setup =
 	, REPLACEMENT_LIST       => [ ["\n" => '[\n]'], ["\r" => '[\r]'], ["\t" => '[\t]'] ]
 	
 	, DISPLAY_NUMBER_OF_ELEMENTS_OVER_MAX_DEPTH => 0
-	
+	, ELEMENT                => 'element'
 	, DISPLAY_CALLER_LOCATION=> 0
 	
 	, __DATA_PATH            => ''
@@ -118,6 +118,7 @@ our $Quotehashkeys        = $setup{QUOTE_HASH} ;
 our $Displaynovalue       = $setup{DISPLAY_NO_VALUE} ;
 our $Quotevalues          = $setup{QUOTE_VALUES} ;
 our $ReplacementList      = [@{$setup{REPLACEMENT_LIST}}] ; # we don't want it to be shared
+our $Element              = $setup{ELEMENT} ;
 
 our $Displaynumberofelementsovermaxdepth = $setup{DISPLAY_NUMBER_OF_ELEMENTS_OVER_MAX_DEPTH} ;
 
@@ -152,6 +153,7 @@ return
 	, GLYPHS                 => $Data::TreeDumper::Glyphs
 	, QUOTE_HASH_KEYS        => $Data::TreeDumper::Quotehashkeys
 	, REPLACEMENT_LIST       => $Data::TreeDumper::ReplacementList
+	, ELEMENT                => $Data::TreeDumper::Element
 	
 	, DISPLAY_NUMBER_OF_ELEMENTS_OVER_MAX_DEPTH => $Displaynumberofelementsovermaxdepth
 	
@@ -177,9 +179,19 @@ sub DumpTree
 {
 my $structure_to_dump = shift ;
 my $title             = shift ;
-my %overrides         =  @_ ;
+$title //= '' ;
 
-$title = defined $title ? $title : '' ;
+
+if (@_ % 2)
+	{
+	my @call_details = caller(0) ;
+
+	print "Error: DumpTree called with Odd number of elements @ " . $call_details[1] . ":" . $call_details[2] . "\n" ;
+	
+	return '' ;
+	}
+
+my %overrides =  @_ ;
 
 my ($package, $file_name, $line) = caller() ;
 
@@ -218,7 +230,7 @@ else
 	
 unless (exists $local_setup{TYPE_FILTERS}{Regexp})
 	{
-	# regexp objecjts (created with qr) are dumped by the below sub
+	# regexp objects (created with qr) are dumped by the below sub
 	$local_setup{TYPE_FILTERS}{Regexp} =
 		sub
 		{
@@ -676,14 +688,18 @@ unless($setup->{NO_OUTPUT})
 		}
 	else
 		{
-		$output .= $setup->{INDENTATION} ;
-		
-		$output .= defined $setup->{TITLE} ? $setup->{TITLE} : '' ;
-		$output .= $root_tie_and_class ;
-		$output .= ' [' . GetReferenceType($tree) . "0]" if($setup->{DISPLAY_ROOT_ADDRESS}) ;
-		$output .= " $tree"                              if($setup->{DISPLAY_PERL_ADDRESS}) ;
-		$output .= " <" . total_size($tree) . ">"        if($setup->{DISPLAY_PERL_SIZE}) ;
-		$output .= "\n" ;
+		my $title = $setup->{TITLE} // '' ;
+
+		if($title ne q{})
+			{
+			$output .= $setup->{INDENTATION}
+					. $title
+					. $root_tie_and_class
+					. ($setup->{DISPLAY_ADDRESS} && $setup->{DISPLAY_ROOT_ADDRESS} ?' [' . GetReferenceType($tree) . "0]" : '')
+					. ($setup->{DISPLAY_PERL_ADDRESS} ? " $tree" : '')
+					. ($setup->{DISPLAY_PERL_SIZE}    ? " <" . total_size($tree) . ">" : '')
+					. "\n" ;
+			}
 		}
 	}
 	
@@ -785,17 +801,30 @@ else
 					}
 				}
 				
-			if($columns eq '')
+			if(!defined $columns || $columns eq '')
 				{
 				$columns = $setup->{VIRTUAL_WIDTH}  ;
 				}
 			}
 			
+		use Text::ANSI::Util 'ta_length' ;
+		#my $header_length = ta_length($tree_header . $tree_subsequent_header) ;
+ 
 		local $Text::Wrap::columns  = $columns ;
 		local $Text::Wrap::unexpand = 0 ;
 		
 		if(length($tree_header) + length($element_description) > $columns && ! $setup->{NO_WRAP})
 			{
+			#$output .= ta_wrap
+			#		(
+			#		$element_description,
+			#		$columns,
+			#		{
+			#			flindent => $tree_header, 
+			#			slindent => $tree_subsequent_header, 
+			#		}
+			#		) ;
+
 			$output .= wrap
 					(
 					  $tree_header 
@@ -895,7 +924,7 @@ for(ref $element)
 		
 		if(! %{$element} && ! $setup->{NO_NO_ELEMENTS})
 			{
-			$default_element_rendering = $element_value = ' (no elements)' ;
+			$default_element_rendering = $element_value = ' (no ' . $setup->{ELEMENT} . 's)' ;
 			}
 		
 		if
@@ -910,7 +939,7 @@ for(ref $element)
 			{
 			my $number_of_elements = keys %{$element} ;
 			my $plural = $number_of_elements > 1 ? 's' : '' ;
-			my $elements = ' (' . $number_of_elements . ' element' . $plural . ')' ; 
+			my $elements = ' (' . $number_of_elements . ' ' . $setup->{ELEMENT} . $plural . ')' ; 
 			
 			$default_element_rendering .= $elements ;
 			$element_value .= $elements ;
@@ -942,7 +971,7 @@ for(ref $element)
 		
 		if(! @{$element} && ! $setup->{NO_NO_ELEMENTS})
 			{
-			$default_element_rendering = $element_value .= ' (no elements)' ;
+			$default_element_rendering = $element_value .= ' (no ' . $setup->{ELEMENT} . 's)' ;
 			}
 		
 		if
@@ -955,8 +984,8 @@ for(ref $element)
 				)
 			)
 			{
-			my $plural = scalar(@{$element}) ? 's' : '' ;
-			my $elements = ' (' . @{$element} . ' element' . $plural . ')' ; 
+			my $plural = scalar(@{$element}) > 1 ? 's' : '' ;
+			my $elements = ' (' . @{$element} . ' ' . $setup->{ELEMENT} . $plural . ')' ; 
 			
 			$default_element_rendering .= $elements ;
 			$element_value .= $elements ;
@@ -1030,7 +1059,7 @@ for(ref $element)
 			{
 			my $number_of_elements = keys %{$element} ;
 			my $plural = $number_of_elements > 1 ? 's' : '' ;
-			$object_elements = ' (' . $number_of_elements . ' element' . $plural . ')' ; 
+			$object_elements = ' (' . $number_of_elements . ' ' . $setup->{ELEMENT} . $plural . ')' ; 
 			}
 		}
 	elsif(obj($element, 'ARRAY'))
@@ -1047,7 +1076,7 @@ for(ref $element)
 			)
 			{
 			my $plural = scalar(@{$element}) ? 's' : '' ;
-			$object_elements = ' (' . @{$element} . ' element' . $plural . ')' ; 
+			$object_elements = ' (' . @{$element} . ' ' . $setup->{ELEMENT} . $plural . ')' ; 
 			}
 		}
 	elsif(obj($element, 'GLOB'))
