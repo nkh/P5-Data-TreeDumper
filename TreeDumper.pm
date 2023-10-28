@@ -12,9 +12,9 @@ require Exporter ;
 our @ISA = qw(Exporter) ;
 our %EXPORT_TAGS = ('all' => [ qw() ]) ;
 our @EXPORT_OK = ( @{$EXPORT_TAGS{'all'} } ) ;
-our @EXPORT = qw(DumpTree PrintTree DumpTrees CreateChainingFilter);
+our @EXPORT = qw(DumpTree PrintTree DumpTrees CreateChainingFilter MD1 MD2) ;
 
-our $VERSION = '0.38' ;
+our $VERSION = '0.41' ;
 
 my $WIN32_CONSOLE ;
 
@@ -34,9 +34,13 @@ BEGIN
 		}
 	}
 	
-use Text::Wrap  ;
+use Text::Wrap ;
+#use Text::ANSI::Util qw(ta_wrap);
 use Class::ISA ;
 use Sort::Naturally ;
+
+use constant MD1 => ('MAX_DEPTH' => 1) ;
+use constant MD2 => ('MAX_DEPTH' => 2) ;
 
 #-------------------------------------------------------------------------------
 # setup values
@@ -171,51 +175,28 @@ return
 
 sub PrintTree
 {
-my ($package, $file_name, $line) = caller() ;
-print DumpTree(@_, DUMPER_NAME => "PrintTree  at '$file_name:$line'") ;
+print DumpTree(@_) ;
 }
 
 sub DumpTree
 {
 my $structure_to_dump = shift ;
-my $title             = shift ;
-$title //= '' ;
-
-
-if (@_ % 2)
-	{
-	my @call_details = caller(0) ;
-
-	print "Error: DumpTree called with Odd number of elements @ " . $call_details[1] . ":" . $call_details[2] . "\n" ;
-	
-	return '' ;
-	}
-
-my %overrides =  @_ ;
+my $title             = shift // '' ;
 
 my ($package, $file_name, $line) = caller() ;
 
-my $location = '' ;
+die "Error: Odd number of arguments @ $file_name:$line\n" if @_ % 2 ; 
 
-if($Displaycallerlocation)
-	{
-	$location = defined $overrides{DUMPER_NAME} ? $overrides{DUMPER_NAME} : "DumpTree at '$file_name:$line'" ;
-	}
-	
-unless(defined $structure_to_dump)
-	{
-	return("$title (undefined variable) $location\n") ;
-	}
+my %overrides = @_ ;
 
-if('' eq ref $structure_to_dump)
-	{
-	return("$title $structure_to_dump (scalar variable) $location\n");
-	}
+$overrides{DUMPER_NAME} //= "DumpTree $file_name:$line" ;
+my $location = $overrides{DUMPER_NAME} ;
+
+return "$title (undefined variable) $location\n" unless defined $structure_to_dump ;
+
+return "$title $structure_to_dump (scalar variable) @ $location\n" if '' eq ref $structure_to_dump ;
 	
-if($Displaycallerlocation)
-	{
-	print "$location\n" ;
-	}
+print STDERR "$location\n" if $Displaycallerlocation ;
 
 my %local_setup ;
 
@@ -239,7 +220,7 @@ unless (exists $local_setup{TYPE_FILTERS}{Regexp})
 		} ;
 	}
 	
-return(TreeDumper($structure_to_dump, {TITLE => $title, %local_setup})) ;
+return TreeDumper($structure_to_dump, {TITLE => $title, %local_setup}) ;
 }
 
 #-------------------------------------------------------------------------------
@@ -263,7 +244,11 @@ for my $tree (@trees)
 	else
 		{
 		my ($package, $file_name, $line) = caller() ;
-		$dump .= "DumpTrees can't dump 'undef' with title: '$title' @ '$file_name:$line'.\n" ;
+
+		$global_overrides{DUMPER_NAME} //= "DumpTree @ $file_name:$line" ;
+		my $location = $global_overrides{DUMPER_NAME} ;
+
+		$dump .= "Can't dump 'undef' with title: '$title' @ $location.\n" ;
 		}
 	}
 	
@@ -432,9 +417,7 @@ $filter_sub = $type_filters->{$type} if(defined $type_filters && exists $type_fi
 
 unless ('CODE' eq ref $filter_sub || ! defined $filter_sub)
 	{
-	my ($package, $file_name, $line) = caller(2) ;
-	
-	die "DumpTree: FILTER must be sub reference at '$file_name:$line'" ;
+	die "FILTER must be sub reference at $setup->{DUMPER_NAME}\n" ;
 	}
 
 return($filter_sub, $setup->{FILTER_ARGUMENT}) ;
@@ -472,15 +455,6 @@ for($tree)
 	
 	($tree_type eq 'ARRAY' || obj($tree, 'ARRAY')) and do
 		{
-		#~ # debug while writting Diff module
-		#~ unless(defined $nodes_to_display->[$node_index])
-			#~ {
-			#~ use Data::Dumper ;
-			#~ print Dumper $nodes_to_display ;
-			#~ my ($package, $file_name, $line) = caller() ;
-			#~ print "Called from $file_name, $line\n" ;
-			#~ print "$tree->\[$nodes_to_display->\[$node_index\]\]\n" ;
-			#~ }
 		$element = $tree->[$nodes_to_display->[$node_index]] ;
 		$element_address = "$element" if defined $element ;
 		$element_name = $node_names->[$node_index] ;
@@ -807,11 +781,13 @@ else
 				}
 			}
 			
-		use Text::ANSI::Util 'ta_length' ;
+		#use Text::ANSI::Util 'ta_wrap' ;
 		#my $header_length = ta_length($tree_header . $tree_subsequent_header) ;
  
-		local $Text::Wrap::columns  = $columns ;
+		local $Text::Wrap::columns  = 400 ;
 		local $Text::Wrap::unexpand = 0 ;
+		local $Text::Wrap::tabstop = 1 ;
+		local $Text::Wrap::huge = 'overflow' ;
 		
 		if(length($tree_header) + length($element_description) > $columns && ! $setup->{NO_WRAP})
 			{
@@ -825,12 +801,16 @@ else
 			#		}
 			#		) ;
 
+			$output .= $tree_header ;
+			$output .= $element_description ;
+=pod
 			$output .= wrap
 					(
 					  $tree_header 
 					, $tree_subsequent_header 
 					, $element_description
 					) ;
+=cut
 			}
 		else
 			{
